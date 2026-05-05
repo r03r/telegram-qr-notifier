@@ -3,50 +3,49 @@ const { kv } = require('@vercel/kv');
 
 const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
 const chatId = process.env.TELEGRAM_CHAT_ID;
+const REDIRECT_URL = "https://www.facebook.com/people/Multi-Pro-Maintenance-Services/61588758281593/?sfnsn=wa&mibextid=RUbZ1f";
 
 module.exports = async (req, res) => {
+  // 1. Recolectar información del visitante
+  const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "Desconocida";
+  const userAgent = req.headers["user-agent"] || "Desconocido";
+  const referer = req.headers["referer"] || "Directo (QR)";
+  const now = new Date().toLocaleString("es-ES", { timeZone: "Europe/Madrid" });
+
+  // Detectar dispositivo de forma sencilla
+  const isMobile = /mobile|android|iphone|ipad/i.test(userAgent);
+  const device = isMobile ? "📱 Móvil" : "💻 Escritorio";
+
   try {
-    // 1. Increment counter
+    // 2. Incrementar contador en la base de datos (Vercel KV)
     let count = 0;
     try {
       count = await kv.incr('qr_scans');
     } catch (kvError) {
-      console.error('KV Error (check if Vercel KV is configured):', kvError.message);
-      // Fallback if KV is not configured yet
+      console.error('Error con Vercel KV:', kvError.message);
     }
 
-    // 2. Send Telegram notification
+    // 3. Enviar notificación detallada a Telegram
     if (chatId) {
-      const message = `🚨 ¡Alguien escaneó tu código QR!\n\nTotal de escaneos: ${count || 'N/A'}\nFecha: ${new Date().toLocaleString()}`;
-      await bot.telegram.sendMessage(chatId, message);
-    } else {
-      console.warn('TELEGRAM_CHAT_ID is not set.');
+      const message = `
+🔔 *¡Nuevo Escaneo de QR!* (Visita #${count || '?'})
+
+📅 *Fecha:* ${now}
+🖥️ *Dispositivo:* ${device}
+🌍 *IP:* ${ip}
+🔗 *Origen:* ${referer}
+📲 *Agente:* ${userAgent.substring(0, 100)}...
+      `.trim();
+
+      await bot.telegram.sendMessage(chatId, message, { parse_mode: 'Markdown' });
     }
 
-    // 3. Response to the scanner
-    res.setHeader('Content-Type', 'text/html');
-    res.status(200).send(`
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <title>QR Scanned</title>
-          <meta name="viewport" content="width=device-width, initial-scale=1">
-          <style>
-            body { font-family: sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #f0f2f5; }
-            .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
-            h1 { color: #0088cc; }
-          </style>
-        </head>
-        <body>
-          <div class="card">
-            <h1>¡Gracias!</h1>
-            <p>El código QR ha sido escaneado correctamente.</p>
-          </div>
-        </body>
-      </html>
-    `);
+    // 4. Redirigir al usuario a Facebook
+    res.redirect(302, REDIRECT_URL);
+
   } catch (error) {
-    console.error('Scan handling error:', error);
-    res.status(500).send('Error processing scan');
+    console.error('Error procesando el escaneo:', error);
+    // En caso de error, igual redirigimos para no perder al cliente
+    res.redirect(302, REDIRECT_URL);
   }
 };
