@@ -1,14 +1,12 @@
 const { Telegraf } = require('telegraf');
 const { kv } = require('@vercel/kv');
 
+// Leer variables de entorno
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 
-// Configuración de URLs
 const FB_PAGE_ID = "61588758281593";
 const FB_WEB_URL = "https://www.facebook.com/people/Multi-Pro-Maintenance-Services/61588758281593/?sfnsn=wa&mibextid=RUbZ1f";
-
-const bot = new Telegraf(TELEGRAM_TOKEN);
 
 module.exports = async (req, res) => {
   const userAgent = req.headers["user-agent"] || "";
@@ -20,21 +18,33 @@ module.exports = async (req, res) => {
   const device = (isIos || isAndroid) ? "📱 Móvil" : "💻 Escritorio";
 
   try {
+    // 1. Incrementar contador
     let count = 0;
-    try { count = await kv.incr('qr_scans'); } catch (e) {}
+    try { 
+      count = await kv.incr('qr_scans'); 
+    } catch (e) {
+      console.error("KV Error:", e.message);
+    }
 
+    // 2. Enviar a Telegram (CON AWAIT para que no se pierda)
     if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
-      const message = `🔔 *¡Nuevo Escaneo!* (#${count || '?'})\n🖥️ ${device}\n📅 ${now}\n🌍 IP: ${ip}`.trim();
-      bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' }).catch(console.error);
+      try {
+        const bot = new Telegraf(TELEGRAM_TOKEN);
+        const message = `🔔 *¡Nuevo Escaneo!* (#${count || '?'})\n\n🖥️ *Disp:* ${device}\n📅 *Fecha:* ${now}\n🌍 *IP:* ${ip}\n📲 *Agente:* ${userAgent.substring(0, 50)}...`.trim();
+        
+        // Es vital esperar el envío en Vercel
+        await bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' });
+      } catch (botError) {
+        console.error("Error enviando a Telegram:", botError.message);
+      }
+    } else {
+      console.warn("Faltan variables: TOKEN o CHAT_ID");
     }
 
-    // Definir el enlace profundo según el sistema operativo
+    // 3. Respuesta HTML y Redirección
     let appUrl = FB_WEB_URL;
-    if (isIos) {
-      appUrl = `fb://page/?id=${FB_PAGE_ID}`;
-    } else if (isAndroid) {
-      appUrl = `fb://page/${FB_PAGE_ID}`;
-    }
+    if (isIos) appUrl = `fb://page/?id=${FB_PAGE_ID}`;
+    else if (isAndroid) appUrl = `fb://page/${FB_PAGE_ID}`;
 
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
@@ -54,23 +64,20 @@ module.exports = async (req, res) => {
       <body>
           <div class="card">
               <img src="/logo.png" alt="Logo" class="logo">
-              <h2>Abriendo Facebook...</h2>
-              <p>Estamos conectándote con nuestra página oficial.</p>
-              <a href="${FB_WEB_URL}" class="btn">Abrir manualmente</a>
+              <h2>Conectando...</h2>
+              <p>Redirigiendo a nuestra página oficial.</p>
+              <a href="${FB_WEB_URL}" class="btn">Abrir Facebook</a>
+              <!-- DEBUG: ${TELEGRAM_CHAT_ID ? 'ID Configurado' : 'ID NO CONFIGURADO'} -->
           </div>
           <script>
-              // Intentar abrir la App
               window.location.href = "${appUrl}";
-              
-              // Si no se abre la app, después de 1 segundo redirigir a la web
-              setTimeout(function() {
-                  window.location.href = "${FB_WEB_URL}";
-              }, 1200);
+              setTimeout(function() { window.location.href = "${FB_WEB_URL}"; }, 1500);
           </script>
       </body>
       </html>
     `);
   } catch (error) {
+    console.error("Error General:", error);
     res.redirect(302, FB_WEB_URL);
   }
 };
