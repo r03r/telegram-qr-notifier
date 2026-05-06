@@ -1,9 +1,12 @@
 const { Telegraf } = require('telegraf');
 const { kv } = require('@vercel/kv');
 
-const bot = new Telegraf(process.env.TELEGRAM_TOKEN);
-const chatId = process.env.TELEGRAM_CHAT_ID;
+// Configuración directa
+const TELEGRAM_TOKEN = "8577523789:AAGCOmSUv2bACOv7FYddz4Wydkrb0galjZg";
+const TELEGRAM_CHAT_ID = "467061459";
 const REDIRECT_URL = "https://www.facebook.com/people/Multi-Pro-Maintenance-Services/61588758281593/?sfnsn=wa&mibextid=RUbZ1f";
+
+const bot = new Telegraf(TELEGRAM_TOKEN);
 
 module.exports = async (req, res) => {
   const ip = req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "Desconocida";
@@ -14,7 +17,7 @@ module.exports = async (req, res) => {
   const device = isMobile ? "📱 Móvil" : "💻 Escritorio";
 
   try {
-    // 1. Contador y Notificación (se ejecutan rápido)
+    // 1. Contador de visitas (Vercel KV)
     let count = 0;
     try {
       count = await kv.incr('qr_scans');
@@ -22,17 +25,23 @@ module.exports = async (req, res) => {
       console.error('KV Error:', kvError.message);
     }
 
-    if (chatId) {
-      const message = `
-🔔 *¡Nuevo Escaneo!* (#${count || '?'})
-🖥️ ${device} | 🌍 IP: ${ip}
-📅 ${now}
-      `.trim();
-      // No esperamos a que Telegram responda para que la página cargue más rápido
-      bot.telegram.sendMessage(chatId, message, { parse_mode: 'Markdown' }).catch(console.error);
-    }
+    // 2. Notificación a Telegram
+    const message = `
+🔔 *¡Nuevo Escaneo de QR!*
+━━━━━━━━━━━━━━━━━━
+🔢 *Visita:* #${count || '?'}
+🖥️ *Dispositivo:* ${device}
+📅 *Fecha:* ${now}
+🌍 *IP:* ${ip}
+🔗 *Origen:* ${referer}
+📲 *Agente:* ${userAgent.substring(0, 80)}...
+━━━━━━━━━━━━━━━━━━
+    `.trim();
 
-    // 2. Respuesta HTML con redirección múltiple
+    // Enviamos el mensaje (sin esperar para no retrasar la redirección)
+    bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' }).catch(console.error);
+
+    // 3. Respuesta con el logo y redirección automática
     res.setHeader('Content-Type', 'text/html');
     res.status(200).send(`
       <!DOCTYPE html>
@@ -44,32 +53,34 @@ module.exports = async (req, res) => {
           <title>Multi-Pro Maintenance Services</title>
           <style>
               body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #f0f2f5; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; }
-              .card { text-align: center; background: white; padding: 2rem; border-radius: 15px; box-shadow: 0 8px 30px rgba(0,0,0,0.1); max-width: 320px; width: 90%; }
-              .logo { max-width: 150px; border-radius: 50%; margin-bottom: 1rem; }
-              h1 { color: #1c1e21; font-size: 1.1rem; margin-bottom: 0.5rem; }
-              p { color: #606770; font-size: 0.9rem; margin-bottom: 1.5rem; }
-              .btn { display: inline-block; background: #1877f2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 6px; font-weight: bold; font-size: 0.9rem; }
-              .loader { border: 2px solid #f3f3f3; border-top: 2px solid #1877f2; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 8px; }
+              .card { text-align: center; background: white; padding: 2.5rem; border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.12); max-width: 320px; width: 90%; }
+              .logo { max-width: 160px; border-radius: 50%; margin-bottom: 1.5rem; box-shadow: 0 4px 15px rgba(0,0,0,0.1); }
+              h1 { color: #1c1e21; font-size: 1.3rem; margin-bottom: 8px; }
+              p { color: #606770; font-size: 0.95rem; margin-bottom: 1.5rem; line-height: 1.4; }
+              .btn { display: inline-block; background: #1877f2; color: white; text-decoration: none; padding: 12px 24px; border-radius: 8px; font-weight: bold; font-size: 1rem; transition: background 0.3s; }
+              .btn:active { background: #145dbf; }
+              .loader { border: 2px solid #f3f3f3; border-top: 2px solid #1877f2; border-radius: 50%; width: 16px; height: 16px; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
               @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
           </style>
       </head>
       <body>
           <div class="card">
               <img src="/logo.png" alt="Logo" class="logo">
-              <h1>Conectando...</h1>
-              <p>Redirigiendo a nuestra página oficial en Facebook.</p>
+              <h1>¡Hola!</h1>
+              <p>Te estamos conectando con nuestra página de Facebook.</p>
               <a href="${REDIRECT_URL}" class="btn">
-                  <div class="loader"></div> Ir ahora
+                  <div class="loader"></div> Redirigiendo...
               </a>
           </div>
           <script>
-              setTimeout(() => { window.location.replace("${REDIRECT_URL}"); }, 1500);
+              setTimeout(() => { window.location.replace("${REDIRECT_URL}"); }, 1800);
           </script>
       </body>
       </html>
     `);
 
   } catch (error) {
+    console.error('Error general:', error);
     res.redirect(302, REDIRECT_URL);
   }
 };
