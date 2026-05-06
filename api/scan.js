@@ -3,7 +3,7 @@ const { kv } = require('@vercel/kv');
 
 // Leer variables de entorno
 const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
-const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID || "1383229469"; // Actualizado con tu ID real
 
 const FB_PAGE_ID = "61588758281593";
 const FB_WEB_URL = "https://www.facebook.com/people/Multi-Pro-Maintenance-Services/61588758281593/?sfnsn=wa&mibextid=RUbZ1f";
@@ -26,22 +26,19 @@ module.exports = async (req, res) => {
       console.error("KV Error:", e.message);
     }
 
-    // 2. Enviar a Telegram (CON AWAIT para que no se pierda)
+    // 2. Enviar a Telegram
     if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
       try {
         const bot = new Telegraf(TELEGRAM_TOKEN);
-        const message = `🔔 *¡Nuevo Escaneo!* (#${count || '?'})\n\n🖥️ *Disp:* ${device}\n📅 *Fecha:* ${now}\n🌍 *IP:* ${ip}\n📲 *Agente:* ${userAgent.substring(0, 50)}...`.trim();
+        const message = `🔔 *¡Nuevo Escaneo!* (#${count || '?'})\n\n🖥️ *Disp:* ${device}\n📅 *Fecha:* ${now}\n🌍 *IP:* ${ip}`.trim();
         
-        // Es vital esperar el envío en Vercel
         await bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' });
       } catch (botError) {
         console.error("Error enviando a Telegram:", botError.message);
       }
-    } else {
-      console.warn("Faltan variables: TOKEN o CHAT_ID");
     }
 
-    // 3. Respuesta HTML y Redirección
+    // 3. Respuesta HTML
     let appUrl = FB_WEB_URL;
     if (isIos) appUrl = `fb://page/?id=${FB_PAGE_ID}`;
     else if (isAndroid) appUrl = `fb://page/${FB_PAGE_ID}`;
@@ -67,7 +64,6 @@ module.exports = async (req, res) => {
               <h2>Conectando...</h2>
               <p>Redirigiendo a nuestra página oficial.</p>
               <a href="${FB_WEB_URL}" class="btn">Abrir Facebook</a>
-              <!-- DEBUG: ${TELEGRAM_CHAT_ID ? 'ID Configurado' : 'ID NO CONFIGURADO'} -->
           </div>
           <script>
               window.location.href = "${appUrl}";
@@ -77,7 +73,6 @@ module.exports = async (req, res) => {
       </html>
     `);
   } catch (error) {
-    console.error("Error General:", error);
     res.redirect(302, FB_WEB_URL);
   }
 };
