@@ -1,9 +1,9 @@
 const { Telegraf } = require('telegraf');
 const { kv } = require('@vercel/kv');
 
-// Configuración directa
-const TELEGRAM_TOKEN = "8577523789:AAGCOmSUv2bACOv7FYddz4Wydkrb0galjZg";
-const TELEGRAM_CHAT_ID = "467061459";
+// Ahora el código lee de forma segura las variables que pusiste en Vercel
+const TELEGRAM_TOKEN = process.env.TELEGRAM_TOKEN;
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_CHAT_ID;
 const REDIRECT_URL = "https://www.facebook.com/people/Multi-Pro-Maintenance-Services/61588758281593/?sfnsn=wa&mibextid=RUbZ1f";
 
 const bot = new Telegraf(TELEGRAM_TOKEN);
@@ -26,7 +26,8 @@ module.exports = async (req, res) => {
     }
 
     // 2. Notificación a Telegram
-    const message = `
+    if (TELEGRAM_TOKEN && TELEGRAM_CHAT_ID) {
+      const message = `
 🔔 *¡Nuevo Escaneo de QR!*
 ━━━━━━━━━━━━━━━━━━
 🔢 *Visita:* #${count || '?'}
@@ -36,10 +37,10 @@ module.exports = async (req, res) => {
 🔗 *Origen:* ${referer}
 📲 *Agente:* ${userAgent.substring(0, 80)}...
 ━━━━━━━━━━━━━━━━━━
-    `.trim();
+      `.trim();
 
-    // Enviamos el mensaje (sin esperar para no retrasar la redirección)
-    bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' }).catch(console.error);
+      bot.telegram.sendMessage(TELEGRAM_CHAT_ID, message, { parse_mode: 'Markdown' }).catch(console.error);
+    }
 
     // 3. Respuesta con el logo y redirección automática
     res.setHeader('Content-Type', 'text/html');
